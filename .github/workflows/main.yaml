@@ -1,4 +1,4 @@
-name: Build and Push to ECR
+name: Build, Push and Deploy
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  build-and-push:
+  build-push-deploy:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -34,3 +34,19 @@ jobs:
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Deploy to Instance B via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            aws ecr get-login-password --region ap-south-1 | sudo docker login --username AWS --password-stdin 844252721140.dkr.ecr.ap-south-1.amazonaws.com
+            sudo docker stop $(sudo docker ps -q) 2>/dev/null || true
+            sudo docker rm $(sudo docker ps -aq) 2>/dev/null || true
+            sudo docker rmi $(sudo docker images -q) 2>/dev/null || true
+            sudo docker pull 844252721140.dkr.ecr.ap-south-1.amazonaws.com/awsworking:latest
+            sudo docker run -d -p 80:5000 844252721140.dkr.ecr.ap-south-1.amazonaws.com/awsworking:latest
+
